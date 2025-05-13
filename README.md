@@ -28,8 +28,8 @@ LLM Prefill与Decoding阶段性能对比实验，通过实验对比LLM推理中P
 ### 2. 下载代码
 
 ```bash
-git clone <你的仓库地址>
-cd <你的仓库目录>
+git clone https://github.com/chen-ace/LLM-Prefill-Decode-Benchmark.git
+cd LLM-Prefill-Decode-Benchmark
 ```
 
 ### 3. 运行实验脚本
