@@ -1,0 +1,69 @@
+检测到Apple Silicon MPS 后端可用，将使用 'mps' 设备进行Prefill和部分Decode。
+CPU设备将用于对比Decode阶段：'cpu'
+实验配置: 模型=gpt2, 并发数=2, 输入长度约=512, 生成长度=512
+Prefill设备=mps, Decode对比设备=mps vs cpu
+正在加载模型和分词器...
+为设备 'mps' 加载模型...
+为设备 'cpu' 加载模型...
+输入数据准备完成。每个请求实际输入token数: 512, 总输入: 1024 tokens
+------------------------------
+Apple Silicon (MPS) GPU活动监控提示:
+1. 打开“活动监视器” -> 菜单栏“窗口” -> “GPU历史记录”。
+2. 在终端运行: sudo powermetrics --samplers gpu_power -i 1000
+------------------------------
+正在进行设备预热...
+mps 设备预热完成。
+cpu 设备预热完成。
+
+--- 开始正式测试 ---
+
+阶段 P: 在 mps 上执行Prefill (批处理)...
+提示：请手动开始观察MPS GPU活动。
+提示：请手动结束观察MPS GPU活动。
+  Prefill (1024 tokens total) 耗时: 0.1734 秒
+  Prefill 吞吐量: 5904.51 tokens/秒
+
+场景 A: Decode 阶段在 mps 上执行 (批处理)...
+提示：请手动开始观察MPS GPU活动。
+提示：请手动结束观察MPS GPU活动。
+  Decode (总共生成 1024 tokens) 耗时: 5.0964 秒
+  Decode 吞吐量 (mps): 200.93 tokens/秒
+
+场景 B: Decode 阶段在 cpu 上执行 (批处理)...
+  正在将KV Cache从 mps 转移到 cpu...
+  KV Cache转移耗时: 0.0158 秒
+  Decode (总共生成 1024 tokens, 纯计算) 耗时: 11.5258 秒
+  Decode 吞吐量 (cpu, 纯计算): 88.84 tokens/秒
+  Decode (含KV Cache转移) 总耗时: 11.5416 秒
+  Decode 吞吐量 (cpu, 含KV Cache转移): 88.72 tokens/秒
+
+--- 实验结果总结与分析 ---
+模型: gpt2, 并发数: 2, 输入长度: 512, 生成长度: 512
+(MPS实际生成tokens总数: 1024, CPU实际生成tokens总数: 1024)
+
+Prefill阶段 (在mps上，共1024 tokens):
+  - 耗时: 0.1734 s, 吞吐量: 5904.51 tokens/s
+
+Decode阶段对比 (共生成约 1024 tokens):
+  场景 A (在mps上):
+    - 耗时: 5.0964 s
+    - 吞吐量: 200.93 tokens/s
+  场景 B (在cpu上):
+    - KV Cache转移耗时: 0.0158 s
+    - Decode纯计算耗时: 11.5258 s
+    - Decode纯计算吞吐量: 88.84 tokens/s
+    - Decode总耗时 (含转移): 11.5416 s
+    - Decode总吞吐量 (含转移): 88.72 tokens/s
+
+分析:
+  1. Prefill阶段在GPU/MPS上通常能通过批处理达到较高吞吐量。
+  2. 对于批处理Decode阶段，MPS的吞吐量 (200.93 t/s) 现在应该会显著高于CPU（含转移成本，88.72 t/s）。
+     MPS Decode约比CPU Decode (含转移) 快 2.26 倍。
+     这是因为批处理为MPS提供了更多的并行工作量，使其能够更有效地利用其计算资源。
+     而CPU虽然也能批处理，但其核心数和并行能力远不及GPU/MPS。
+     如果CPU decode吞吐量仍然意外地高或接近MPS，可能仍与模型非常小、MPS后端对特定小批量操作的优化程度有关。
+  3. 随着并发数（批处理大小）的增加，MPS（或传统GPU）相对于CPU的性能优势在Decode阶段通常会更加明显。
+  4. PD分离的可行性：此实验展示了即使在批处理情况下，P和D阶段也可以在不同设备上执行，
+     但性能考量（尤其是数据转移开销和目标设备的处理能力）至关重要。
+
+实验结束。

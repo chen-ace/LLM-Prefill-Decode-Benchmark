@@ -1,0 +1,86 @@
+检测到 CUDA。将使用 'cuda' 进行Prefill和部分Decode场景。
+用于对比Decode阶段的CPU设备：'cpu'
+实验配置: 模型=gpt2, 并发请求数=10, 输入长度约=512, 生成长度=512
+Prefill设备=cuda, Decode对比: cuda vs cpu
+正在加载模型和分词器...
+已将 pad_token 设置为 eos_token ('<|endoftext|>')
+正在为设备 'cuda' 加载模型...
+正在为设备 'cpu' 加载模型...
+输入数据准备完成。每个请求实际输入token数: 512, 总输入token数: 5120
+------------------------------
+CUDA GPU活动监控提示:
+你可以在终端使用 'nvidia-smi' 命令来监控GPU活动。
+例如: `watch -n 0.5 nvidia-smi`
+------------------------------
+正在进行设备预热...
+正在预热 cuda 设备...
+cuda 设备预热完成。
+正在预热 cpu 设备...
+cpu 设备预热完成。
+
+--- 开始正式测试 ---
+
+阶段 P: 在 cuda 上执行Prefill (批量处理)...
+提示：请按需使用 nvidia-smi 开始观察 CUDA GPU 活动。
+提示：你可以手动停止观察 nvidia-smi。
+  Prefill (总共 5120 tokens) 耗时: 0.0850 秒
+  Prefill 吞吐量: 60262.27 tokens/秒
+
+场景 A: Decode阶段在 cuda 上执行 (批量处理)...
+提示：请按需使用 nvidia-smi 开始观察 CUDA GPU 活动。
+   已在 cuda 上生成 1000 tokens...
+   已在 cuda 上生成 2000 tokens...
+   已在 cuda 上生成 3000 tokens...
+   已在 cuda 上生成 4000 tokens...
+   已在 cuda 上生成 5000 tokens...
+提示：你可以手动停止观察 nvidia-smi。
+  Decode (总共生成 5120 tokens) 耗时: 3.0019 秒
+  Decode 吞吐量 (cuda): 1705.60 tokens/秒
+
+场景 B: Decode阶段在 cpu 上执行 (批量处理, KV Cache来自 cuda)...
+  正在将KV Cache从 cuda 转移到 cpu...
+  KV Cache和初始tokens转移耗时: 0.0898 秒
+   已在 cpu 上生成 1000 tokens...
+   已在 cpu 上生成 2000 tokens...
+   已在 cpu 上生成 3000 tokens...
+   已在 cpu 上生成 4000 tokens...
+   已在 cpu 上生成 5000 tokens...
+  Decode (生成 5120 tokens, 纯计算) 耗时: 25.6715 秒
+  Decode 吞吐量 (cpu, 纯计算): 199.44 tokens/秒
+  Decode (含KV Cache转移) 总耗时: 25.7614 秒
+  Decode 吞吐量 (cpu, 含KV Cache转移): 198.75 tokens/秒
+
+--- 实验结果总结与分析 ---
+模型: gpt2, 并发请求数: 10, 输入长度: 512, 每个请求最大生成新Token数: 512
+(GPU实际生成tokens总数: 5120, CPU实际生成tokens总数: 5120)
+
+Prefill阶段 (在cuda上, 共5120 tokens):
+  - 耗时: 0.0850 秒, 吞吐量: 60262.27 tokens/秒
+
+Decode阶段对比 (总共生成约 5120 tokens):
+  场景 A (在cuda上Decode):
+    - 耗时: 3.0019 秒
+    - 吞吐量: 1705.60 tokens/秒
+  场景 B (在cuda上Prefill, 在cpu上Decode):
+    - KV Cache转移耗时 (cuda -> cpu): 0.0898 秒
+    - Decode纯计算耗时 (cpu): 25.6715 秒
+    - Decode纯计算吞吐量 (cpu): 199.44 tokens/秒
+    - Decode总耗时 (含转移): 25.7614 秒
+    - Decode总吞吐量 (含转移): 198.75 tokens/秒
+
+分析:
+  1. 在cuda上的Prefill (60262.27 t/s) 预计会显著快于在CPU上运行，特别是在批处理较大和提示较长的情况下，这得益于GPU的并行处理能力。
+  2. 在cuda上Decode (1705.60 t/s) vs. 在cpu上Decode (含转移, 198.75 t/s):
+     GPU Decode约比CPU Decode (含转移) 快 8.58 倍。
+     这突显了GPU在逐个token生成方面的优势，即使是批量处理。
+     纯CPU decode计算吞吐量为 199.44 t/s。
+     如果 0.0898秒 占 25.7614秒 的重要部分, 这表明数据移动可能是一个瓶颈。
+  3. P(GPU)-D(CPU)方案的可行性:
+     - 如果CPU的decode速度对于应用来说“足够快”，并且GPU能更快地被释放用于更多的prefill操作，那么这种设置是可行的。
+     - 这是一种权衡：GPU用于decode的时间 vs. KV cache转移开销 + CPU decode时间。
+     - 对于拥有大量并发用户，且TTFT（首个token生成时间，主要由prefill决定）至关重要，而后续在CPU上的token生成速度可接受的系统，这可能是一种最大化GPU用于prefill任务利用率的策略。
+     - 然而，如果每个用户的端到端生成速度至关重要，并且GPU本身不是瓶颈，那么将decode保留在GPU上通常更快。
+  4. 增加 NUM_CONCURRENT_REQUESTS (批处理大小) 通常会提高GPU上prefill和decode的吞吐量，直到设备饱和或内存成为限制因素。
+
+正在清理模型并释放内存...
+实验结束。
