@@ -2,6 +2,14 @@
 
 LLM Prefill与Decoding阶段性能对比实验，通过实验对比LLM推理中Prefill和Decoding阶段的吞吐量差异，揭示性能瓶颈，解释PD分离优化技术的原理。包含CUDA和Apple MPS (M系列芯片) 的测试脚本。
 
+## 说明
+
+本项目可以结合作者的文章一起看：
+
+https://zhuanlan.zhihu.com/p/1906392814327148652
+
+https://mp.weixin.qq.com/s/a7bouaw3BvCDT7qQ2xYfvw
+
 ## 📖 项目说明
 
 本项目包含两个Python脚本 (`experiment_pd_mps.py` 和 `experiment_pd_cuda.py`)，旨在通过实验直观地展示大型语言模型（LLM）在推理过程中，Prefill（提示词处理）阶段和Decoding（逐Token生成）阶段的性能特性差异。
